@@ -12,6 +12,141 @@ npop = 50 # population size
 beta = np.pi/36 # 5 degrees
 
 
+def ES_1(problem):
+    """
+    This function uses:
+        - Global Sigma Mutation
+        - Intermediate Recombination
+        - (mu + lambda) selection
+    """
+    n = problem.number_of_variables
+
+    tao_0 = 1 / np.sqrt(n)  # learning rate (tao 0)
+    lamda = npop * 7  # offspring population size
+
+    fopt = -sys.maxsize - 1
+
+    # Initial Population samples uniformly distributed over the interval (boundaries)
+    P = np.random.uniform(low=problem.lowerbound[0], high=problem.upperbound[0], size=(npop, n))
+
+    sigmas = [(problem.upperbound[0] - problem.lowerbound[0]) / 6] * lamda  # Global Sigma initialization with feasible range
+
+    # Fitness evaluation of the population
+    fitness = -1 * np.apply_along_axis(problem, 1, P)
+
+    if np.max(fitness) >= fopt:
+        x_prime = P[np.argmax(fitness)]
+        fopt = np.max(fitness)
+
+    ## !! final_target_hit returns True if the optimum has been found.
+    ## !! evaluations returns the number of function evaluations has been done on the problem.
+    while not problem.final_target_hit and problem.evaluations < budget * n:
+        OP = []  # offspring population
+
+        ### Intermediate Recombination
+        for i in range(lamda):
+            parent1 = P[np.random.choice(npop)]
+            parent2 = P[np.random.choice(npop)]
+            offspring = np.mean((parent1, parent2), axis=0)
+            OP.append(offspring)
+
+        OP = np.array(OP)  # Offspring population
+        OP_prime = []
+
+        ### Mutation
+        for j, x in enumerate(OP):
+            sigmas[j] = sigmas[j] * np.exp(np.random.normal(0, tao_0))
+            x_prime = x + np.random.normal(0, sigmas[j], size=n)
+            OP_prime.append(x_prime)
+
+        OP_prime = np.array(OP_prime)
+
+        ### Evaluation of (OP_prime + P)
+        total_pop = np.append(P, OP_prime, axis=0)
+        fitness = -1 * np.apply_along_axis(problem, 1, total_pop)
+        if np.max(fitness) >= fopt:
+            x_prime = total_pop[np.argmax(fitness)]
+            fopt = np.max(fitness)
+
+        ### Selection
+        top_fits = heapq.nlargest(npop, fitness)
+        sorter = np.argsort(fitness)
+        indices = sorter[np.searchsorted(fitness, top_fits, sorter=sorter)]
+        P = total_pop[indices]
+
+    return x_prime, fopt
+
+
+def ES_2(problem):
+    """
+    This function uses:
+        - Individual Sigma Mutation
+        - Intermediate Recombination
+        - (mu + lambda) selection
+    """
+    n = problem.number_of_variables
+
+    tao_prime = 1 / np.sqrt(2 * n)  # global learning rate
+    tao_0 = 1 / np.sqrt(2 * np.sqrt(n))  # local learning rate
+
+    lamda = npop * 7  # offspring population size
+
+    fopt = -sys.maxsize - 1
+
+    # Initial Population samples uniformly distributed over the interval (boundaries)
+    P = np.random.uniform(low=problem.lowerbound[0], high=problem.upperbound[0], size=(npop, n))
+
+    sigmas = [[(problem.upperbound[0] - problem.lowerbound[0]) / 6] * n] * lamda  # Individual sigma initialization with feasible range
+
+    # Fitness evaluation of the population
+    fitness = -1 * np.apply_along_axis(problem, 1, P)
+
+    if np.max(fitness) >= fopt:
+        x_prime = P[np.argmax(fitness)]
+        fopt = np.max(fitness)
+
+    ## !! final_target_hit returns True if the optimum has been found.
+    ## !! evaluations returns the number of function evaluations has been done on the problem.
+    while not problem.final_target_hit and problem.evaluations < budget * n:
+        OP = []  # offspring population
+
+        ### Intermediate Recombination
+        for i in range(lamda):
+            parent1 = P[np.random.choice(npop)]
+            parent2 = P[np.random.choice(npop)]
+            offspring = np.mean((parent1, parent2), axis=0)
+            OP.append(offspring)
+
+        OP = np.array(OP)  # Offspring population
+        OP_prime = []
+
+        N_tao_prime = np.random.normal(0, tao_prime)
+
+        ### Mutation
+        for x, sigma in zip(OP, sigmas):
+            for x_i, sigma_i in zip(x, sigma):
+                sigma_i = sigma_i * np.exp(N_tao_prime + np.random.normal(0, tao_0))
+                x_i = x_i + np.random.normal(0, sigma_i)
+            OP_prime.append(x)
+
+        OP_prime = np.array(OP_prime)
+
+        ### Evaluation of (OP_prime + P)
+        total_pop = np.append(P, OP_prime, axis=0)
+        fitness = -1 * np.apply_along_axis(problem, 1, total_pop)
+        if np.max(fitness) >= fopt:
+            x_prime = total_pop[np.argmax(fitness)]
+            fopt = np.max(fitness)
+
+        ### Selection
+        top_fits = heapq.nlargest(npop, fitness)
+        sorter = np.argsort(fitness)
+        indices = sorter[np.searchsorted(fitness, top_fits, sorter=sorter)]
+        P = total_pop[indices]
+
+    return x_prime, fopt
+
+
 def ES_3(problem):
     """
     This function uses:
@@ -32,11 +167,11 @@ def ES_3(problem):
     # Initial Population samples uniformly distributed over the interval (boundaries)
     P = np.random.uniform(low=problem.lowerbound[0], high=problem.upperbound[0], size=(npop, n))
 
-    alphas = np.random.uniform(low=-np.pi, high=np.pi, size=n_q)  # rotation angles initialized
+    alphas = np.random.uniform(low=-np.pi, high=np.pi, size=(lamda, n_q))  # rotation angles initialized
 
     OOB_correction = lambda x: x - 2 * np.pi * (x / np.abs(x)) if (np.abs(x) > np.pi).any() else x  # out of boundary correction function
 
-    sigmas = [(problem.upperbound[0] - problem.lowerbound[0]) / 6] * npop  # Individual sigma initialization with feasible range
+    sigmas = [[(problem.upperbound[0] - problem.lowerbound[0]) / 6] * n] * lamda  # Individual sigma initialization with feasible range
 
     # Fitness evaluation of the population
     fitness = -1 * np.apply_along_axis(problem, 1, P)
@@ -63,169 +198,34 @@ def ES_3(problem):
 
         ### Mutation
         # Step size update
-        sigmas_prime = [sigma * np.exp(N_tao_prime + np.random.normal(0, tao_0)) for sigma in sigmas]
+        sigmas_prime = [[sigma_i * np.exp(N_tao_prime + np.random.normal(0, tao_0)) for sigma_i in sigma] for sigma in sigmas]
 
         # Rotation angles update
-
-        alphas_prime = np.apply_along_axis(OOB_correction, 0, alphas + np.random.normal(0, beta, size=n_q))
+        alphas_prime = alphas + np.random.normal(0, beta, size=(lamda, n_q))
+        for alpha_prime in alphas_prime:
+            alpha_prime = np.apply_along_axis(OOB_correction, 0, alpha_prime)
 
         # Correlation of steps sizes
-        s = np.zeros(n)
-        for n_i in range(n):
-            s[n_i] = sigmas_prime[n_i] * np.random.normal(0, 1)  # uncorrelated mutation vector initialization
-
-        for k in range(1, n):
-            n_i = n - 1 - k
-            n_ii = n - 1
-            for i in range(1, k + 1):
-                d1, d2 = s[n_i], s[n_ii]
-                s[n_ii] = d1 * np.sin(alphas_prime[n_q - 1]) + d2 * np.cos(alphas_prime[n_q - 1])
-                s[n_i] = d1 * np.cos(alphas_prime[n_q - 1]) - d2 * np.sin(alphas_prime[n_q - 1])
-                n_ii = n_ii - 1
-                n_q = n_q - 1
-
         OP_prime = []
-        for x_i, sigma_i in zip(OP, sigmas_prime):
-            x_i_prime = x_i + sigma_i * s
-            OP_prime.append(x_i_prime)
+        for j, x, sigma_prime in zip(range(lamda), OP, sigmas_prime):
+            s = np.zeros(n)
+            n_q = int(n * (n - 1) / 2)
+            for n_i in range(n):
+                s[n_i] = sigma_prime[n_i] * np.random.normal(0, 1)  # uncorrelated mutation vector initialization
+
+            for k in range(n - 1):
+                n_i = n - 1 - k
+                n_ii = n - 1
+                for i in range(k):
+                    d1, d2 = s[n_i], s[n_ii]
+                    s[n_ii] = d1 * np.sin(alphas_prime[j, n_q - 1]) + d2 * np.cos(alphas_prime[j, n_q - 1])
+                    s[n_i] = d1 * np.cos(alphas_prime[j, n_q - 1]) - d2 * np.sin(alphas_prime[j, n_q - 1])
+                    n_ii = n_ii - 1
+                    n_q = n_q - 1
+
+            x_prime = x + s
+            OP_prime.append(x_prime)
         OP_prime = np.array(OP_prime)
-
-        ### Evaluation of OP_prime
-        fitness = -1 * np.apply_along_axis(problem, 1, OP_prime)
-        if np.max(fitness) >= fopt:
-            x_prime = OP_prime[np.argmax(fitness)]
-            fopt = np.max(fitness)
-
-        ### Selection
-        top_fits = heapq.nlargest(npop, fitness)
-        sorter = np.argsort(fitness)
-        indices = sorter[np.searchsorted(fitness, top_fits, sorter=sorter)]
-        P = OP_prime[indices]
-
-    return x_prime, fopt
-
-
-def ES_5(problem):
-    """
-    This function uses:
-        - Global Sigma Mutation
-        - Intermediate Recombination
-        - (mu, lambda) selection
-    """
-    n = problem.number_of_variables
-
-    tao_0 = 1 / np.sqrt(n)  # learning rate (tao 0)
-    lamda = npop * 7  # offspring population size
-
-    fopt = -sys.maxsize - 1
-
-    # Initial Population samples uniformly distributed over the interval (boundaries)
-    P = np.random.uniform(low=problem.lowerbound[0], high=problem.upperbound[0], size=(npop, n))
-
-    sigma = (problem.upperbound[0] - problem.lowerbound[0]) / 6  # Global Sigma initialization with feasible range
-
-    # Fitness evaluation of the population
-    fitness = -1 * np.apply_along_axis(problem, 1, P)
-
-    if np.max(fitness) >= fopt:
-        x_prime = P[np.argmax(fitness)]
-        fopt = np.max(fitness)
-
-    ## !! final_target_hit returns True if the optimum has been found.
-    ## !! evaluations returns the number of function evaluations has been done on the problem.
-    while not problem.final_target_hit and problem.evaluations < budget * n:
-        OP = []  # offspring population
-
-        ### Intermediate Recombination
-        for i in range(lamda):
-            parent1 = P[np.random.choice(npop)]
-            parent2 = P[np.random.choice(npop)]
-            offspring = np.mean((parent1, parent2), axis=0)
-            OP.append(offspring)
-
-        OP = np.array(OP)  # Offspring population
-        OP_prime = []
-
-        sigma_prime = sigma * np.exp(np.random.normal(0, tao_0))
-
-        ### Mutation
-        for x_i in OP:
-            x_i_prime = x_i + np.random.normal(0, sigma_prime)
-            OP_prime.append(x_i_prime)
-
-        OP_prime = np.array(OP_prime)
-
-        ### Evaluation of OP_prime
-        fitness = -1 * np.apply_along_axis(problem, 1, OP_prime)
-        if np.max(fitness) >= fopt:
-            x_prime = OP_prime[np.argmax(fitness)]
-            fopt = np.max(fitness)
-
-        ### Selection
-        top_fits = heapq.nlargest(npop, fitness)
-        sorter = np.argsort(fitness)
-        indices = sorter[np.searchsorted(fitness, top_fits, sorter=sorter)]
-        P = OP_prime[indices]
-
-    return x_prime, fopt
-
-
-def ES_6(problem):
-    """
-    This function uses:
-        - Individual Sigma Mutation
-        - Intermediate Recombination
-        - (mu, lambda) selection
-    """
-    n = problem.number_of_variables
-
-    tao_prime = 1 / np.sqrt(2 * n)  # global learning rate
-    tao_0 = 1 / np.sqrt(2 * np.sqrt(n))  # local learning rate
-
-    lamda = npop * 7  # offspring population size
-
-    fopt = -sys.maxsize - 1
-
-    # Initial Population samples uniformly distributed over the interval (boundaries)
-    P = np.random.uniform(low=problem.lowerbound[0], high=problem.upperbound[0], size=(npop, n))
-
-    sigmas = [(problem.upperbound[0] - problem.lowerbound[0]) / 6] * npop  # Individual sigma initialization with feasible range
-
-    # Fitness evaluation of the population
-    fitness = -1 * np.apply_along_axis(problem, 1, P)
-
-    if np.max(fitness) >= fopt:
-        x_prime = P[np.argmax(fitness)]
-        fopt = np.max(fitness)
-
-    ## !! final_target_hit returns True if the optimum has been found.
-    ## !! evaluations returns the number of function evaluations has been done on the problem.
-    while not problem.final_target_hit and problem.evaluations < budget * n:
-        OP = []  # offspring population
-
-        ### Intermediate Recombination
-        for i in range(lamda):
-            parent1 = P[np.random.choice(npop)]
-            parent2 = P[np.random.choice(npop)]
-            offspring = np.mean((parent1, parent2), axis=0)
-            OP.append(offspring)
-
-        OP = np.array(OP)  # Offspring population
-        OP_prime = []
-        sigmas_prime = []
-
-        N_tao_prime = np.random.normal(0, tao_prime)
-
-        ### Mutation
-        for x_i, sigma_i in zip(OP, sigmas):
-            sigma_i_prime = sigma_i * np.exp(N_tao_prime + np.random.normal(0, tao_0))
-            sigmas_prime.append(sigma_i_prime)
-
-            x_i_prime = x_i + np.random.normal(0, sigma_i_prime)
-            OP_prime.append(x_i_prime)
-
-        OP_prime = np.array(OP_prime)
-        sigmas = sigmas_prime
 
         ### Evaluation of OP_prime
         fitness = -1 * np.apply_along_axis(problem, 1, OP_prime)
@@ -243,37 +243,26 @@ def ES_6(problem):
 
 if __name__ == '__main__':
 
-    ## Declarations of Ids, instances, and dimensions that the problems to be tested.
-    problem_id = range(1, 25)
-    instance_id = range(1, 26)
-    dimension = [2, 5, 20]
+    function_list = [ES_1, ES_2, ES_3]
+    function_names = ["ES_1", "ES_2", "ES_3"]
 
-    ## Declariation of IOHprofiler_csv_logger.
-    ## 'result' is the name of output folder.
-    ## 'studentname1_studentname2' represents algorithm name and algorithm info, which will be caption of the algorithm in IOHanalyzer.
-    logger = IOH_logger("./", "result-ES_5", "ES_5", "ES_5")
+    for function, name in zip(function_list, function_names):
+        ## Declarations of Ids, instances, and dimensions that the problems to be tested.
+        problem_id = range(1, 25)
+        instance_id = range(1, 26)
+        dimension = [2, 5, 20]
 
-    for p_id in problem_id :
-        for d in dimension :
-            for i_id in instance_id:
-                ## Getting the problem with corresponding id,dimension, and instance.
-                f = IOH_function(p_id, d, i_id, suite="BBOB")
-                f.add_logger(logger)
-                xopt, fopt = ES_5(f)
-        print("Problem ", p_id, " completed!")
-    logger.clear_logger()
+        ## Declariation of IOHprofiler_csv_logger.
+        ## 'result' is the name of output folder.
+        ## 'studentname1_studentname2' represents algorithm name and algorithm info, which will be caption of the algorithm in IOHanalyzer.
+        logger = IOH_logger("./", "FinalResult-"+name, name, name)
 
-    ## Declariation of IOHprofiler_csv_logger.
-    ## 'result' is the name of output folder.
-    ## 'studentname1_studentname2' represents algorithm name and algorithm info, which will be caption of the algorithm in IOHanalyzer.
-    logger = IOH_logger("./", "result-ES_6", "ES_6", "ES_6")
-
-    for p_id in problem_id:
-        for d in dimension:
-            for i_id in instance_id:
-                ## Getting the problem with corresponding id,dimension, and instance.
-                f = IOH_function(p_id, d, i_id, suite="BBOB")
-                f.add_logger(logger)
-                xopt, fopt = ES_6(f)
-        print("Problem ", p_id, " completed!")
-    logger.clear_logger()
+        for p_id in problem_id :
+            for d in dimension :
+                for i_id in instance_id:
+                    ## Getting the problem with corresponding id,dimension, and instance.
+                    f = IOH_function(p_id, d, i_id, suite="BBOB")
+                    f.add_logger(logger)
+                    xopt, fopt = function(f)
+            print("Problem ", p_id, " completed!")
+        logger.clear_logger()
