@@ -25,6 +25,7 @@ def likhi_bozik_ES(problem):
 
     return x_prime, fopt
 
+
 if __name__ == '__main__':
 
     ## Declarations of Ids, instances, and dimensions that the problems to be tested.
